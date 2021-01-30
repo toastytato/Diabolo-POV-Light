@@ -1,3 +1,6 @@
+const uint8_t CHAR_HEIGHT = 10;
+const uint8_t CHAR_WIDTH = 5;
+
 const uint8_t C[10][5] = {
   {1, 1, 1, 1, 1},
   {1, 0, 0, 0, 0},

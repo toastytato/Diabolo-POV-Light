@@ -3,13 +3,12 @@
 #define TIMER_INTERRUPT_DEBUG         0
 #define _TIMERINTERRUPT_LOGLEVEL_     0
 
-#include <Adafruit_NeoPixel.h>
 #include <MPU6050.h>
 #include <ESP8266WiFi.h>
 #include <BlynkSimpleEsp8266.h>
 #include "ESP8266TimerInterrupt.h"
 #include "ESP8266_ISR_Timer.h"
-#include "Display_Map.h"
+#include "Display_Driver.h"
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
@@ -22,13 +21,10 @@ char auth[] = "iaRtdId-t0a7NHn1YeD_1eHz-Vx4x-Kd";
 char ssid[32] = "I like Elmo cuz he's red";
 char pass[32] = "idonotlikewholewheatbread";
 
-const int LED_PIN = 0;
-const int NUM_LEDS = 10;  //radius (# of leds)
-
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
 ESP8266Timer ITimer;
 ESP8266_ISR_Timer ISR_Timer;
 BlynkTimer Blynk_Timer;
+DisplayDriverPOV Driver;
 
 MPU6050 imu1(0x68); //AD0 low
 MPU6050 imu2(0x69); //AD0 high
@@ -47,7 +43,6 @@ int16_t a2[3];
 volatile float diff = 0;
 volatile float ang_vel = 0;
 volatile float dps = 0;
-float gyro_dps = 0;
 float rpm = 0;
 
 float prevDiff = 0; //prev accel difference to determine change in state
@@ -55,18 +50,11 @@ float threshold = 1; //diff threshold (based on ang vel) to start POV sequence
 volatile float correction = 1;
 
 int hw_timer_interval = 1;
-int update_display_interval = 50; //doesn't really matter since it'll get updated again
 int update_sensor_interval = 1; //in ms
-int send_blynk_interval = 200;
+int send_blynk_interval = 500;
 
-const int NUM_SECTORS = 50; //circumference (resolution in the polar axis)
-const float THETA = 360 / NUM_SECTORS;  //angle per sector
-
-volatile uint8_t displayLed[NUM_SECTORS][NUM_LEDS]; //matrix for displaying led
-volatile uint8_t sectorStage = 0;  //curr sector
-volatile uint8_t brightness = 100;
-
-const int NUM_READINGS = 4;
+//moving average variables
+const int NUM_READINGS = 3;
 int readIndex = 0;
 float readings[NUM_READINGS];
 float total = 0;
@@ -75,7 +63,7 @@ volatile float avg_dps = 0;
 #define abs(x) ((x)>0?(x):-(x)) //esp8266 doesn't have abs for floats for some reason, so this works for floats
 
 void sendBlynkEvent() {
-  String msg = String(avg_dps) + ":" + String(diff);
+  String msg = String(millis() / 1000) + " " + String(avg_dps) + ":" + String(diff);
   Blynk.virtualWrite(3, msg);
 }
 
@@ -86,17 +74,9 @@ void ICACHE_RAM_ATTR TimerHandler() {
 }
 
 void updateDisplay() {
-  for (uint8_t i = 0; i < NUM_LEDS; i++) {
-    uint8_t state = displayLed[sectorStage][NUM_LEDS - i]; //0 or 1
-    pixels.setPixelColor(i, pixels.Color(0, brightness * state, 0));
-  }
-  pixels.show();
-
-  sectorStage = (sectorStage + 1) % NUM_SECTORS;
-
-  // update
-  update_display_interval = THETA * 1000 / abs(avg_dps); //time inside the sector in ms
-  ISR_Timer.changeInterval(0, update_display_interval); // update timer 0
+  Driver.show_sector();
+  Driver.increment_sector();
+  ISR_Timer.changeInterval(0, Driver.get_time_in_sector(avg_dps)); // update timer 0
   //  Serial.println("Update Display");
 }
 
@@ -114,16 +94,16 @@ void readSensorEvent()
   // 2048 normalize to 1g when perpendicular
   a1_c = -a1[0] / 2048.0;
   a2_c = a2[0] / 2048.0;
-
   //adjustments to make it exactly 1g when undisturbed
   //idk if I should add or multiply to get to 1 ehh who knows
   a1_c += 0.01;
   a2_c -= 0.03;
+
   // diff * gravity to convert from g to m/s
-  diff = abs(a1_c - a1_c) * GRAVITY_ACCEL;
+  diff = abs(a1_c - a2_c) * GRAVITY_ACCEL;
   ang_vel = correction * sqrt(diff / SENSOR_DISTANCE);
   rpm = 60 * ang_vel / (2 * 3.141592);
-  dps = rpm * 6; 
+  dps = rpm * 6;
 
   //create a moving average for dps
   total = total - readings[readIndex];
@@ -137,19 +117,17 @@ void readSensorEvent()
   Serial.print("\t");
   Serial.print(a1[0]);
   Serial.print("\t");
-  Serial.print(ay1_vect[0]);
+  Serial.print(a1_c);
   Serial.print("\t");
   Serial.print(a2[0]);
   Serial.print("\t");
-  Serial.print(ay2_vect[0]);
+  Serial.print(a2_c);
   Serial.print("\t");
   Serial.println(dps);
 
-  //  update_display_interval = THETA * 1000000 / abs(dps); // converts time till next update to
-
   if (diff > threshold && prevDiff < threshold) { //on beginning of rotation
     ISR_Timer.enableAll();
-    ISR_Timer.changeInterval(0, update_display_interval);
+    ISR_Timer.changeInterval(0, 50); //timer 0 trigger in 1 ms (calls updateDisplay almost immediately)
   } else if (diff < threshold) { //module is not rotating
     ISR_Timer.disableAll();
   }
@@ -160,39 +138,14 @@ void readSensorEvent()
 
 //sets up the display led arrays with the image to show
 void initiateLedMatrix() {
-  for (uint8_t i = 0; i < NUM_SECTORS; i++) {
-    for (uint8_t j = 0; j < NUM_LEDS; j++) {
-      if (i == 0) {
-        for (uint8_t k = 0; k < 5; k++) {
-          displayLed[i + k][j] = H[j][k];
-        }
-      }
-      if (i == 6) {
-        for (uint8_t k = 0; k < 5; k++) {
-          displayLed[i + k][j] = E[j][k];
-        }
-      }
-      if (i == 12) {
-        for (uint8_t k = 0; k < 5; k++) {
-          displayLed[i + k][j] = L[j][k];
-        }
-      }
-      if (i == 18) {
-        for (uint8_t k = 0; k < 5; k++) {
-          displayLed[i + k][j] = L[j][k];
-        }
-      }
-      if (i == 24) {
-        for (uint8_t k = 0; k < 5; k++) {
-          displayLed[i + k][j] = O[j][k];
-        }
-      }
-    }
-  }
-
-  // Instantiate the intial position of the display
-  //  sectorStage = NUM_SECTORS * atan(a1[0] / a1[1]) / (2 * 3.14159);
-  Serial.println(sectorStage);
+  //  Driver.set_char('H');
+  //  Driver.set_char('E');
+  //  Driver.set_char('L');
+  //  Driver.set_char('L');
+  //  Driver.set_char('O');
+  Driver.set_line();
+  Driver.set_line();
+  Driver.set_line();
 }
 
 void setup() {
@@ -203,6 +156,7 @@ void setup() {
 
   Serial.begin(9600);
   Blynk.begin(auth, ssid, pass);
+  Driver.show_boot_up_sequence(); //indicate connected to wifi
 
   Wire.begin();
   imu1.initialize();
@@ -212,16 +166,13 @@ void setup() {
 
   //  Timer based on hardware interrupts for time critical tasks, won't be blocked by Blynk
   ITimer.attachInterruptInterval(hw_timer_interval * 500, TimerHandler);
-  ISR_Timer.setInterval(update_display_interval, updateDisplay);  //Timer 0
+  ISR_Timer.setInterval(50, updateDisplay);  //Timer 0
   //  ISR_Timer.setInterval(update_sensor_interval, readSensorEvent); //Timer 1
   //  ISR_Timer.setInterval(send_blynk_interval, sendBlynkEvent);     //Timer 2
 
   // Blynk Timer for non time critical events
   Blynk_Timer.setInterval(update_sensor_interval, readSensorEvent);
   Blynk_Timer.setInterval(send_blynk_interval, sendBlynkEvent);
-
-  pixels.begin();
-  Serial.println("Setup Done");
 }
 
 void loop() {
@@ -240,10 +191,7 @@ BLYNK_WRITE(V1)
   } else {
     Serial.println("disable");
     ISR_Timer.disableAll();
-    for (int i = 0; i < NUM_LEDS; i++) {
-      pixels.setPixelColor(i, pixels.Color(0, 0, 0));
-    }
-    pixels.show();
+    Driver.show_line(0);  //show a line of 0 brightness pixels
   }
 }
 
@@ -251,7 +199,7 @@ BLYNK_WRITE(V1)
 BLYNK_WRITE(V2)
 {
   int value = param.asInt();
-  brightness = value;
+  Driver.set_brightness(value);
 }
 
 //
