@@ -74,8 +74,8 @@ void ICACHE_RAM_ATTR TimerHandler() {
 }
 
 void updateDisplay() {
-  Driver.show_sector();
-  Driver.increment_sector();
+  Driver.show_sector(true);
+  Driver.decrement_sector();
   ISR_Timer.changeInterval(0, Driver.get_time_in_sector(avg_dps)); // update timer 0
   //  Serial.println("Update Display");
 }
@@ -113,17 +113,17 @@ void readSensorEvent()
 
   avg_dps = total / NUM_READINGS;
 
-  Serial.print(diff);
-  Serial.print("\t");
-  Serial.print(a1[0]);
-  Serial.print("\t");
-  Serial.print(a1_c);
-  Serial.print("\t");
-  Serial.print(a2[0]);
-  Serial.print("\t");
-  Serial.print(a2_c);
-  Serial.print("\t");
-  Serial.println(dps);
+  //  Serial.print(diff);
+  //  Serial.print("\t");
+  //  Serial.print(a1[0]);
+  //  Serial.print("\t");
+  //  Serial.print(a1_c);
+  //  Serial.print("\t");
+  //  Serial.print(a2[0]);
+  //  Serial.print("\t");
+  //  Serial.print(a2_c);
+  //  Serial.print("\t");
+  //  Serial.println(dps);
 
   if (diff > threshold && prevDiff < threshold) { //on beginning of rotation
     ISR_Timer.enableAll();
@@ -138,14 +138,14 @@ void readSensorEvent()
 
 //sets up the display led arrays with the image to show
 void initiateLedMatrix() {
-  //  Driver.set_char('H');
-  //  Driver.set_char('E');
-  //  Driver.set_char('L');
-  //  Driver.set_char('L');
-  //  Driver.set_char('O');
-  Driver.set_line();
-  Driver.set_line();
-  Driver.set_line();
+    Driver.set_char('H');
+    Driver.set_char('E');
+    Driver.set_char('L');
+    Driver.set_char('L');
+    Driver.set_char('O');
+//  Driver.set_line();
+ // Driver.set_line();
+//  Driver.set_line();
 }
 
 void setup() {
@@ -184,7 +184,7 @@ BLYNK_WRITE(V1)
 {
   // param is a member variable of the Blynk ADT. It is exposed so you can read it.
   int onoff = param.asInt(); // assigning incoming value from pin V1 to a variable
-
+  updateDisplay();
   if (onoff) {
     Serial.println("enable");
     ISR_Timer.enableAll();
@@ -201,6 +201,17 @@ BLYNK_WRITE(V2)
   int value = param.asInt();
   Driver.set_brightness(value);
 }
+
+//Step values buttons
+BLYNK_WRITE(V6)
+{
+  int value = param.asInt();
+  Driver.set_curr_sector(value);
+  Driver.show_sector(true);
+  Serial.println(Driver.get_curr_sector());
+  Driver.increment_sector();
+}
+
 
 //
 BLYNK_WRITE(V4) //dps drift correction
