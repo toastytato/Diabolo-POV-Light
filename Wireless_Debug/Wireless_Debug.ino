@@ -19,8 +19,8 @@ char auth[] = "sUiVLDEdz785MPaqng-pNojrN3_wLcw9";
 // Set password to "" for open networks.
 // The EE IOT network is hidden. You might not be able to see it.
 // But you should be able to connect with these credentials.
-char ssid[32] = "I like Elmo cuz he's red";
-char pass[32] = "idonotlikewholewheatbread";
+char ssid[32] = "";
+char pass[32] = "";
 
 const uint8_t ledPinR = 17;
 const uint8_t ledPinY = 18;
