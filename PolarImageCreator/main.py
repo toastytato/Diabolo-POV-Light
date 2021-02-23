@@ -1,4 +1,6 @@
 import math
+import os
+import socket
 
 import numpy as np
 import pygame
@@ -6,7 +8,6 @@ from matplotlib import colors
 
 
 def draw_display():
-
     on_color = [x * 255 for x in colors.to_rgb("blue")]
     off_color = [x * 255 for x in colors.to_rgb("red")]
 
@@ -40,6 +41,7 @@ def rect_to_polar(x, y):
 
     return magnitude, angle * R2D
 
+
 def polar_to_pixel(radius, angle):
     pixel = int((radius - (pixel_offset - 1) * pixel_height) * num_pixels / circle_radius)
     sector = int(angle * num_sectors / 360)
@@ -47,14 +49,64 @@ def polar_to_pixel(radius, angle):
     return sector, pixel
 
 
+def display_to_string(display):
+    file_name = 'Generated_Map.h'
+    save_path = 'D:\Engineering Projects\Diabolo POV\Code\YoyoLightOTA'
+    name = os.path.join(save_path, file_name)
+
+    with open(name, 'w') as f:
+        f.write(f"#define NUM_LEDS \t\t {num_pixels} \n")
+        f.write(f"#define NUM_SECTORS \t {num_sectors} \n\n")
+
+        f.write("const uint8_t GENERATED_DISPLAY")
+        f.write(f"[{num_sectors}][{num_pixels}] = {{\n")
+        for sector in display:
+            f.write("\t{")
+            for led_state in sector:
+                if led_state:
+                    f.write("1, ")
+                else:
+                    f.write("0, ")
+            f.write("},\n")
+        f.write("};")
+
+
+def UDP_message():
+    # Receive BUFFER_SIZE bytes data
+    # data is a list with 2 elements
+    # first is data
+    # second is client address
+    data = s.recvfrom(BUFFER_SIZE)
+    if data:
+        # print received data
+        print('Client to Server: ', data)
+        # Convert to upper case and send back to Client
+        s.sendto(data[0].upper(), data[1])
+
+
+# Close connection
+
 if __name__ == "__main__":
+
+    # bind all IP
+    HOST = '0.0.0.0'
+    # Listen on Port
+    PORT = 8266
+    # Size of receive buffer
+    BUFFER_SIZE = 1024
+    # Create a TCP/IP socket
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    # Bind the socket to the host and port
+    s.bind((HOST, PORT))
+
+
 
     pygame.init()
 
     R2D = 180 / np.pi  # radians to degrees
 
-    num_sectors = 100  # how many chunks along circumference
-    num_pixels = 20  # how many "LEDs" along radius
+    num_sectors = 60  # how many chunks along circumference
+    num_pixels = 10  # how many "LEDs" along radius
     pixel_state = np.zeros(shape=(num_sectors, num_pixels), dtype=bool)
 
     canvas_width = 720
@@ -76,6 +128,8 @@ if __name__ == "__main__":
     mouse_pos = None
 
     while running:
+        # UDP_message()
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -100,10 +154,13 @@ if __name__ == "__main__":
                     pixel_state.fill(False)
                 if event.key == pygame.K_f:
                     print(pixel_state)
+                if event.key == pygame.K_p:
+                    display_to_string(pixel_state)
         draw_display()
         # pixel_state[curr_sector][5] = not pixel_state[curr_sector][5]
         # curr_sector = (curr_sector + 1) % num_sectors
 
         pygame.display.flip()
 
+    s.close()
     pygame.quit()

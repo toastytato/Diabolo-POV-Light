@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+
+<body>
+
+<canvas id="canvas" height="400" width="500">
+</canvas>
+
+<script type="text/javascript" src="{{ url_for('static', filename='js/script.js') }}">
+</script>
+
+<h2>Hello World</h2>
+<form action="button">
+    <button type="submit">Press Button!</button>
+</form>
+
+<form action="submit" method="get">
+    <p>Enter Correction:</p>
+    <p><input type="number" step="0.001" name="correction"/></p>
+    <p><input type="submit" value="submit"/></p>
+</form>
+
+
+</body>
+</html>

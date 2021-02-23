@@ -9,6 +9,7 @@
 #include "ESP8266TimerInterrupt.h"
 #include "ESP8266_ISR_Timer.h"
 #include "Display_Driver.h"
+#include "config.h"
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
@@ -18,8 +19,8 @@ char auth[] = "iaRtdId-t0a7NHn1YeD_1eHz-Vx4x-Kd";
 // Set password to "" for open networks.
 // The EE IOT network is hidden. You might not be able to see it.
 // But you should be able to connect with these credentials.
-char ssid[32] = "I like Elmo cuz he's red";
-char pass[32] = "idonotlikewholewheatbread";
+char ssid[32] = SSID;
+char pass[32] = PASS;
 
 ESP8266Timer ITimer;
 ESP8266_ISR_Timer ISR_Timer;
@@ -47,14 +48,14 @@ float rpm = 0;
 
 float prevDiff = 0; //prev accel difference to determine change in state
 float threshold = 1; //diff threshold (based on ang vel) to start POV sequence
-volatile float correction = 1;
+volatile float correction = .9;
 
 int hw_timer_interval = 1;
-int update_sensor_interval = 1; //in ms
+int update_sensor_interval = 15; //in ms
 int send_blynk_interval = 500;
 
 //moving average variables
-const int NUM_READINGS = 3;
+const int NUM_READINGS = 1;
 int readIndex = 0;
 float readings[NUM_READINGS];
 float total = 0;
@@ -65,6 +66,8 @@ volatile float avg_dps = 0;
 void sendBlynkEvent() {
   String msg = String(millis() / 1000) + " " + String(avg_dps) + ":" + String(diff);
   Blynk.virtualWrite(3, msg);
+//  Serial.println("Send blynk event");
+  
 }
 
 //Updates the ISR Timer.
@@ -74,16 +77,17 @@ void ICACHE_RAM_ATTR TimerHandler() {
 }
 
 void updateDisplay() {
-  Driver.show_sector(true);
-  Driver.decrement_sector();
+  Driver.show_sector(false); //params: flip the sector
+  Driver.increment_sector();
   ISR_Timer.changeInterval(0, Driver.get_time_in_sector(avg_dps)); // update timer 0
-  //  Serial.println("Update Display");
+    Serial.println("Update Display");
 }
 
 //gets called every 1 ms
 //updates the current rpm value
 void readSensorEvent()
 {
+//  Serial.println("Sensor");
   //  dps = correction * imu.getRotationZ() / 16.4; //converts sensor reading to degrees/second
   //  rpm = dps * 60 / 360;  //dps to rpm
   imu1.getAcceleration(&a1[0], &a1[1], &a1[2]);
@@ -106,13 +110,13 @@ void readSensorEvent()
   dps = rpm * 6;
 
   //create a moving average for dps
-  total = total - readings[readIndex];
-  readings[readIndex] = dps;
-  total += readings[readIndex];
-  readIndex = (readIndex + 1) % NUM_READINGS;
+//  total = total - readings[readIndex];
+//  readings[readIndex] = dps;
+//  total += readings[readIndex];
+//  readIndex = (readIndex + 1) % NUM_READINGS;
 
-  avg_dps = total / NUM_READINGS;
-
+  //  avg_dps = total / NUM_READINGS;
+  avg_dps = dps;
   //  Serial.print(diff);
   //  Serial.print("\t");
   //  Serial.print(a1[0]);
@@ -126,10 +130,10 @@ void readSensorEvent()
   //  Serial.println(dps);
 
   if (diff > threshold && prevDiff < threshold) { //on beginning of rotation
-    ISR_Timer.enableAll();
+    ISR_Timer.enable(0);
     ISR_Timer.changeInterval(0, 50); //timer 0 trigger in 1 ms (calls updateDisplay almost immediately)
   } else if (diff < threshold) { //module is not rotating
-    ISR_Timer.disableAll();
+    ISR_Timer.disable(0);
   }
   prevDiff = diff;
   //  Serial.println("Update Sensor event");
@@ -138,25 +142,28 @@ void readSensorEvent()
 
 //sets up the display led arrays with the image to show
 void initiateLedMatrix() {
-    Driver.set_char('H');
-    Driver.set_char('E');
-    Driver.set_char('L');
-    Driver.set_char('L');
-    Driver.set_char('O');
-//  Driver.set_line();
- // Driver.set_line();
-//  Driver.set_line();
+  Driver.set_char('H');
+  Driver.set_char('E');
+  Driver.set_char('L');
+  Driver.set_char('L');
+  Driver.set_char('O');
+  //  Driver.set_line();
+  //  Driver.set_line();
+  //  Driver.set_line();
+  //  Driver.set_line();
+  //  Driver.set_line();
+  //  Driver.set_line();
 }
 
 void setup() {
   for (uint8_t i = 0; i < NUM_READINGS; i++) {
     readings[i] = 0;
   }
-  initiateLedMatrix();
-
+//  initiateLedMatrix();
+//  Driver.show_boot_up_sequence(); //indicate connected to wifi
+  Driver.cycle_display(200);
   Serial.begin(9600);
-  Blynk.begin(auth, ssid, pass);
-  Driver.show_boot_up_sequence(); //indicate connected to wifi
+    Blynk.begin(auth, ssid, pass);
 
   Wire.begin();
   imu1.initialize();
@@ -165,14 +172,21 @@ void setup() {
   imu2.setFullScaleAccelRange(3);
 
   //  Timer based on hardware interrupts for time critical tasks, won't be blocked by Blynk
-  ITimer.attachInterruptInterval(hw_timer_interval * 500, TimerHandler);
+  // Interval in microsecs
+  if (ITimer.attachInterruptInterval(hw_timer_interval * 1000, TimerHandler))
+  {
+    Serial.println("wE GUCCI");
+  }
+  else
+    Serial.println(F("Can't set ITimer correctly. Select another freq. or interval"));
   ISR_Timer.setInterval(50, updateDisplay);  //Timer 0
-  //  ISR_Timer.setInterval(update_sensor_interval, readSensorEvent); //Timer 1
-  //  ISR_Timer.setInterval(send_blynk_interval, sendBlynkEvent);     //Timer 2
+//  ISR_Timer.setInterval(update_sensor_interval, readSensorEvent); //Timer 1
+//  ISR_Timer.setInterval(send_blynk_interval, sendBlynkEvent);     //Timer 2
 
   // Blynk Timer for non time critical events
-  Blynk_Timer.setInterval(update_sensor_interval, readSensorEvent);
-  Blynk_Timer.setInterval(send_blynk_interval, sendBlynkEvent);
+    Blynk_Timer.setInterval(update_sensor_interval, readSensorEvent);
+    Blynk_Timer.setInterval(send_blynk_interval, sendBlynkEvent);
+
 }
 
 void loop() {
