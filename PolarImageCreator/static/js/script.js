@@ -1,44 +1,57 @@
 //Press Ctrl+F5 in browser to force reload javascript files
-
 const canvas = document.querySelector("#canvas");
-const num_sectors = 20;
-const num_pixels = 10;
+
+const NUM_SECTORS = 20;
+const NUM_PIXELS = 10;
+const SECTOR_GAP = 1 - 0.1;
+const PIXEL_GAP = 1 - 0.1;
+
+const TAU = (2 * Math.PI);
 //initialize a 2D array for circular matrix
-var pixel_states = new Array(num_sectors);
-for (let i = 0; i < pixel_states.length; i++) {
-  pixel_states[i] = new Array(num_pixels).fill(false);
+var pixel_states = new Array(NUM_SECTORS)
+for (let i = 0; i < NUM_SECTORS; i++) {
+  let sector = new Array(NUM_PIXELS);
+  for (let j = 0; j < NUM_PIXELS; j++){
+    sector[j] = 0;
+  }
+  pixel_states[i] = sector;
 }
 
-const center_x = canvas.width / 2;
-const center_y = canvas.height / 2;
-const pixel_offset = 1;
+const HIGHLIGHT_COLOR = "rgba(0,200,0, .90)";
+const BASE_COLOR = "rgba(0,150,150, 1.0)"
+const CLICK_COLOR = "rgba(0,0,200, 1.0)"
+
+const CENTER_X = canvas.width / 2;
+const CENTER_Y = canvas.height / 2;
+const PIXEL_OFFSET = 1;
 var circle_radius = Math.min(canvas.width, canvas.height) / 2;
-circle_radius -= (circle_radius * pixel_offset) / num_pixels;
+circle_radius -= (circle_radius * PIXEL_OFFSET) / NUM_PIXELS;
+var pixel_width = (circle_radius * PIXEL_GAP) / NUM_PIXELS;
+
+var mousedown = false;
 
 if (canvas.getContext) {
-  const ctx = canvas.getContext("2d");
+  const ctx = canvas.getContext("2d")
 
-  ctx.fillStyle = "rgba(10,10,10,0.8)";
-  ctx.lineWidth = (circle_radius * 0.9) / num_pixels;
+  ctx.lineWidth = pixel_width
 
-  for (let i = 0; i < num_sectors; i++) {
-    var sector_angle = (2 * Math.PI) / num_sectors;
-    var start_angle = i * sector_angle;
-    var end_angle = i * sector_angle + sector_angle * 0.95;
+  for (let i = 0; i < NUM_SECTORS; i++) {
+    let arc_angle = (2 * Math.PI) / NUM_SECTORS;
+    let start_angle = i * arc_angle;
+    let end_angle = i * arc_angle + arc_angle * SECTOR_GAP;
+  
+    for (let j = 0; j < NUM_PIXELS; j++) {
+      let arc_dist = (circle_radius * (j + PIXEL_OFFSET)) / NUM_PIXELS;
 
-    for (let j = 0; j < num_pixels; j++) {
-      var arc_radius = (circle_radius * (j + pixel_offset)) / num_pixels;
-      if (pixel_states[i][j]) {
-        ctx.strokeStyle = "rgba(0,200,0, 1.0)";
-      } else {
-        ctx.strokeStyle = "rgba(10,10,10,0.8)";
-      }
-
+      ctx.strokeStyle = BASE_COLOR;
+  
       ctx.beginPath();
-      ctx.arc(center_x, center_y, arc_radius, start_angle, end_angle);
+      ctx.arc(CENTER_X, CENTER_Y, arc_dist, start_angle, end_angle);
       ctx.stroke();
     }
   }
+
+  var last_pixel_coords;
 
   canvas.addEventListener("mousemove", function (e) {
     var cRect = canvas.getBoundingClientRect(); // Gets CSS pos, and width/height
@@ -46,35 +59,75 @@ if (canvas.getContext) {
     let mouseY = Math.round(e.clientY - cRect.top); // from the X/Y positions to make
     let polar_coords = rect_to_polar(mouseX, mouseY);
     let pixel_coords = polar_to_pixel(polar_coords[0], polar_coords[1]);
-    pixel_states[pixel_coords[0] - 1][pixel_coords[1]] = true;
-    ctx.clearRect(0, 0, 100, 200);
-    ctx.fillText(
-      "Sector: " + pixel_coords[0] + ", Pixel: " + pixel_coords[1],
-      10,
-      20
-    );
+
+    if(last_pixel_coords == null){
+      update_pixel(ctx, pixel_coords[0], pixel_coords[1], HIGHLIGHT_COLOR);
+    }
+    else{
+      if(pixel_coords[0] != last_pixel_coords[0] || pixel_coords[1] != last_pixel_coords[1]){
+        if(mousedown){
+          update_pixel(ctx, pixel_coords[0], pixel_coords[1], CLICK_COLOR);
+        } else{
+          update_pixel(ctx, pixel_coords[0], pixel_coords[1], HIGHLIGHT_COLOR);
+          update_pixel(ctx, last_pixel_coords[0], last_pixel_coords[1], BASE_COLOR)
+          console.log("Sector: " + pixel_coords[0] + ", Pixel: " + pixel_coords[1]);
+        }
+      } else{
+        if(mousedown){
+          update_pixel(ctx, pixel_coords[0], pixel_coords[1], CLICK_COLOR);
+        }
+      }
+    }
+
+    last_pixel_coords = pixel_coords;
   });
+
+  canvas.addEventListener("mousedown", function(e){
+    console.log("Click");
+    mousedown = true;
+  });
+  canvas.addEventListener("mouseup", function(e){
+    console.log("Up");
+    mousedown = false;
+  });
+}
+
+function update_pixel(ctx, sector, pixel, color){
+  if(pixel < NUM_PIXELS){
+    pixel_states[sector][pixel] = 1;
+    // arcs drawn cw
+    // angle goes ccw
+    let arc_angle = TAU / NUM_SECTORS;
+    let start_angle = (NUM_SECTORS - sector - 1) * arc_angle; //invert the count so arc is drawn properly
+    let end_angle = (start_angle + arc_angle * SECTOR_GAP);
+    let arc_dist = (circle_radius * (pixel + PIXEL_OFFSET)) / NUM_PIXELS;
+  
+    ctx.strokeStyle = color;
+    ctx.beginPath();
+    ctx.arc(CENTER_X, CENTER_Y, arc_dist, start_angle, end_angle);
+    ctx.stroke();
+  }
 }
 
 // input: x and y coord
 // output: [magnitude, positive angle in degrees]
 function rect_to_polar(x, y) {
-  x = x - center_x;
-  y = -(y - center_y);
-  let magnitude = Math.sqrt(Math.pow(x, 2), Math.pow(y, 2));
+  x = x - CENTER_X;
+  y = -(y - CENTER_Y);
+  let magnitude = Math.sqrt(Math.pow(x, 2) + Math.pow(y, 2));
   let angle = Math.atan2(y, x);
   if (angle < 0) {
     angle = 2 * Math.PI + angle; //Converts neg angle to pos angle
   }
   angle = (angle * 180) / Math.PI; //Radians to Degrees
-
+  // console.log(angle)
   return [magnitude, angle];
 }
 
-function polar_to_pixel(radius, angle) {
+function polar_to_pixel(magnitude, angle) {
   let pixel = Math.round(
-    ((radius - (pixel_offset - 1) * arc_radius) * num_pixels) / circle_radius
+    (magnitude - PIXEL_OFFSET * pixel_width) * NUM_PIXELS / circle_radius
   );
-  let sector = Math.round((angle * num_sectors) / 360);
+  let sector = Math.floor((angle * NUM_SECTORS) / 360);
   return [sector, pixel];
 }

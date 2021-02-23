@@ -29,11 +29,6 @@ def button():
     return redirect('/')
 
 
-@app.route('/success/<name>')
-def success(name):
-    return 'Welcome %s' % name
-
-
 @app.route('/submit', methods=['POST', 'GET'])
 def login():
     if request.method == 'POST':
@@ -46,7 +41,8 @@ def login():
         # print(correction.type())
         return redirect('/')
 
-@app.route('/esp_post', methods=['POST'])
+# receives data from ESP then transmits data from server
+@app.route('/esp_request', methods=['POST'])
 def postHandler():
     if request.method == 'POST':
         print(float(request.data))
@@ -55,4 +51,5 @@ def postHandler():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port='8266')
+    app.run(debug=True)
+    # app.run(host='0.0.0.0', port='8266')
