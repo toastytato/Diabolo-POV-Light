@@ -1,0 +1,29 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\ArduinoJson\\src",
+                "${workspaceRoot}",
+                "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\1.0.3\\**",
+                "C:\\Program Files (x86)\\Arduino\\libraries\\**",
+                "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\**",
+                "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\**",
+                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\**",
+                "C:\\Program Files (x86)\\Arduino\\libraries\\**",
+                "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            "compilerPath": "C:\\cygwin64\\bin\\gcc.exe",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++14",
+            "intelliSenseMode": "windows-gcc-x64"
+        }
+    ],
+    "version": 4
+}
