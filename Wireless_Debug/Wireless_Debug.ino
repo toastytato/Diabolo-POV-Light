@@ -29,7 +29,7 @@ const uint8_t ledPinG = 19;
 
 BlynkTimer timer;
 MPU6050 imu;
-hw_timer_t * ledtimer = NULL;
+hw_timer_t *ledtimer = NULL;
 portMUX_TYPE timerMux = portMUX_INITIALIZER_UNLOCKED;
 
 const int freq = 1;
@@ -38,8 +38,8 @@ const int resolution = 10;
 int duty_cycle = 0;
 int state = 0;
 
-int time_count = 0; // timer counter global variable
-String content = "";  // null string constant ( an empty string )
+int time_count = 0;  // timer counter global variable
+String content = ""; // null string constant ( an empty string )
 
 //0,1,2 --> x,y,z
 float accel[3];
@@ -50,20 +50,25 @@ float rpm;
 int tick_ms = 100;
 
 const int X_SECTORS = 32; //circumference
-const int Y_LED = 1;  //radius
+const int Y_LED = 1;      //radius
 
 int thetaDuration = 90; //degrees to remain on for
 
-void sendBlynkEvent(){
+void sendBlynkEvent()
+{
   Blynk.virtualWrite(3, gyro);
-  Blynk.virtualWrite(8, state);   
+  Blynk.virtualWrite(8, state);
 }
 
-double getTicks(){
- if(state){
-    tick_ms = (360 - thetaDuration) * 1000 / abs(gyro);  
-  } else{
-     tick_ms = thetaDuration * 1000 / abs(gyro);  
+double getTicks()
+{
+  if (state)
+  {
+    tick_ms = (360 - thetaDuration) * 1000 / abs(gyro);
+  }
+  else
+  {
+    tick_ms = thetaDuration * 1000 / abs(gyro);
   }
   return tick_ms * 1000;
 }
@@ -71,30 +76,33 @@ double getTicks(){
 void readSensorEvent()
 {
   gyro = imu.getRotationZ() / 16.4; //converts sensor reading to degrees/second
-  
+
   //portENTER_CRITICAL_ISR(&timerMux);
-  
-  rpm = gyro * 60 / 360;  //dps to rpm
-  
-  if(gyro && prevGyro == 0){ //gyro has reading and initiate display led events
+
+  rpm = gyro * 60 / 360; //dps to rpm
+
+  if (gyro && prevGyro == 0)
+  { //gyro has reading and initiate display led events
     timerAlarmWrite(ledtimer, getTicks(), true);
     timerAlarmEnable(ledtimer);
-  } else if(!gyro){  //reading is empty
+  }
+  else if (!gyro)
+  { //reading is empty
     timerAlarmDisable(ledtimer);
   }
   prevGyro = gyro;
-  
+
   //portEXIT_CRITICAL_ISR(&timerMux);
 }
 
 void IRAM_ATTR updateLedEvent()
 {
   portENTER_CRITICAL_ISR(&timerMux);
-  
+
   digitalWrite(ledPinR, state);
   //Serial.println(state);
   state = !state; //flip state
-  
+
   timerAlarmWrite(ledtimer, getTicks(), true);
 
   portEXIT_CRITICAL_ISR(&timerMux);
@@ -116,10 +124,10 @@ void setup()
   imu.setFullScaleGyroRange(3);
 
   timer.setInterval(10L, sendBlynkEvent); // 10 ms interval
-  timer.setInterval(5L, readSensorEvent);  //reading the gyro
-  ledtimer = timerBegin(0, 80, true); // 80/80MHz = 1000 ns = 1 microsecond
+  timer.setInterval(5L, readSensorEvent); //reading the gyro
+  ledtimer = timerBegin(0, 80, true);     // 80/80MHz = 1000 ns = 1 microsecond
   timerAttachInterrupt(ledtimer, &updateLedEvent, true);
-  
+
   //ledcSetup(ledChannel, freq, resolution);
   //ledcAttachPin(ledPinR, ledChannel);
 
@@ -140,12 +148,15 @@ BLYNK_WRITE(V1)
   int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
   //state = pinValue;
   static int yeet = 0;
-  yeet = !yeet; 
+  yeet = !yeet;
 
-  if(yeet){
+  if (yeet)
+  {
     Serial.println("enable");
     timerAlarmEnable(ledtimer);
-  } else{
+  }
+  else
+  {
     Serial.println("disable");
     timerAlarmDisable(ledtimer);
   }
