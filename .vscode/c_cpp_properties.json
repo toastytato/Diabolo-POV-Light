@@ -3,26 +3,28 @@
         {
             "name": "Win32",
             "includePath": [
+                "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp8266\\tools\\**",
+                "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp8266\\hardware\\esp8266\\2.7.4\\**",
                 "${workspaceFolder}/**",
                 "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\ArduinoJson\\src",
-                "${workspaceRoot}",
+                "${workspaceFolder}",
                 "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp32\\hardware\\esp32\\1.0.3\\**",
                 "C:\\Program Files (x86)\\Arduino\\libraries\\**",
                 "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\**",
                 "C:\\Users\\Jimmy Hsueh\\AppData\\Local\\Arduino15\\packages\\esp32\\tools\\**",
-                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\**",
-                "C:\\Program Files (x86)\\Arduino\\libraries\\**",
-                "C:\\Users\\Jimmy Hsueh\\Documents\\Arduino\\libraries\\**"
+                "C:\\Program Files (x86)\\Arduino\\hardware\\tools\\**"
             ],
             "defines": [
                 "_DEBUG",
                 "UNICODE",
-                "_UNICODE"
+                "_UNICODE",
+                "USBCON"
             ],
             "compilerPath": "C:\\cygwin64\\bin\\gcc.exe",
             "cStandard": "gnu17",
             "cppStandard": "gnu++14",
-            "intelliSenseMode": "windows-gcc-x64"
+            "intelliSenseMode": "windows-gcc-x64",
+            "forcedInclude": []
         }
     ],
     "version": 4
