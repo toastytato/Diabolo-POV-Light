@@ -10,6 +10,7 @@
 #include "ESP8266TimerInterrupt.h"
 #include "ESP8266_ISR_Timer.h"
 #include "Display_Driver.h"
+#include "My_Packet_Parser.h"
 #include "config.h"
 
 /* Dev Notes
@@ -24,21 +25,9 @@
  *  2/24/21 - I2C Don't work no more :( Can't communicate with IMU 
  */
 
-/*
- Buffer Map:
- Update:  [0][sector][x_size][y_size][z_size][...data...]
- Control: [1][sector][]
- Change:  [2][wifi_polling_rate_ms][]
- Ignore:  [# not above]
- *
- *
- *
- 
- */
-
 ESP8266Timer ITimer;
 ESP8266_ISR_Timer ISR_Timer;
-DisplayDriverPOV Driver;
+DisplayDriverPOV Driver(10, 0); //Params: # Leds, Led Pin
 
 MPU6050 imu1(0x68); //AD0 low
 MPU6050 imu2(0x69); //AD0 high
@@ -86,17 +75,50 @@ float offset = 0;
 const char *SERVER_IP = "192.168.0.102";
 const char *SERVER_PORT = "8266"; //port used by the computer
 const int UDP_PORT = 8266;        //port used by Flask
-const int WIFI_POLLING_INTERVAL_MS = 200;
-const int BUFFER_SIZE = 2000; //will allow for a 64x10x3 matrix and some header info
-float last_millis = 0;
-uint8_t buffer[BUFFER_SIZE];
+const int WIFI_POLLING_INTERVAL_MS = 300;
+
+const int IN_BUFFER_SIZE = 2000; //2000 will allow for a 64x10x3 matrix and some header info
+uint8_t receive_buffer[IN_BUFFER_SIZE];
+
+const int OUT_BUFFER_SIZE = 10;
+uint8_t transmit_buffer[OUT_BUFFER_SIZE];
+
 uint8_t prev_buffer_state = 0;
 
+float last_millis = 0;
 volatile bool update_flag = false; // tells main loop when new sector is reached
 
-// #define abs(x) ((x) > 0 ? (x) : -(x)) //esp8266 doesn't have abs for floats for some reason, so this works for floats
+#define abs(x) ((x) > 0 ? (x) : -(x)) //esp8266 doesn't have abs for floats for some reason, so this works for floats
 
-void ICACHE_RAM_ATTR TimerHandler()
+/*** CALLBACK FUNCTIONS ***/
+
+//callback function: has to be void and accept udp_msg param
+void Update_Callback(udp_msg *packet_ptr)
+{
+  //casts the bitstream packet into a struct to be accessed as reference
+  struct update_packet
+  {
+    uint8_t curr_sector;
+    uint8_t num_sectors;
+    uint8_t num_pixels;
+    uint8_t num_colors;
+    uint8_t display_start_byte;
+  };
+
+  update_packet *update_msg = (update_packet *)(&(packet_ptr->content_start_byte));
+  uint8_t *display_matrix = &update_msg->display_start_byte;
+  Driver.set_display_array(display_matrix,
+                           update_msg->num_sectors,
+                           update_msg->num_pixels,
+                           update_msg->num_colors);
+  Driver.set_curr_sector(update_msg->curr_sector);
+  // Driver.print();
+  update_flag = true;
+  Serial.println("Update");
+}
+
+//timer callback function: triggered when display rotates into a new sector
+void ICACHE_RAM_ATTR Timer_Handler()
 {
   if (spin_CW)
   {
@@ -108,12 +130,30 @@ void ICACHE_RAM_ATTR TimerHandler()
   }
   Driver.increment_count();
   update_flag = true;
-  ITimer.setInterval(Driver.time_in_sector_ms(avg_dps) * 1000, TimerHandler); // update timer 0
+  ITimer.setInterval(Driver.time_in_sector_ms(avg_dps) * 1000, Timer_Handler); // update timer 0
 }
+
+//interrupt button callback: stops the updates and shows a line when toggled
+void ICACHE_RAM_ATTR On_Click_ISR()
+{
+  if (led_state)
+  {
+    Driver.show_line(10);
+    ITimer.stopTimer();
+  }
+  else
+  {
+    Driver.show_line(0);
+    ITimer.enableTimer();
+  }
+  led_state = !led_state;
+}
+
+/*** DATA PROCESSING ***/
 
 //gets called every pass on loop when possible
 //updates the current rpm value
-void readSensorEvent()
+void Read_Sensor_Event()
 {
   imu1.getAcceleration(&a1[0], &a1[1], &a1[2]);
   imu2.getAcceleration(&a2[0], &a2[1], &a2[2]);
@@ -155,7 +195,7 @@ void readSensorEvent()
       spin_CW = true;
     }
     ITimer.enableTimer();
-    ITimer.setInterval(50 * 1000, TimerHandler); //timer 0 trigger (calls updateDisplay almost immediately)
+    ITimer.setInterval(50 * 1000, Timer_Handler); //timer 0 trigger (calls updateDisplay almost immediately)
   }
   else if (diff < threshold && prev_diff > threshold)
   { //module is not rotating
@@ -175,20 +215,7 @@ void readSensorEvent()
   // Serial.println(dps);
 }
 
-void ICACHE_RAM_ATTR on_click_ISR()
-{
-  if (led_state)
-  {
-    Driver.show_line(10);
-    ITimer.stopTimer();
-  }
-  else
-  {
-    Driver.show_line(0);
-    ITimer.enableTimer();
-  }
-  led_state = !led_state;
-}
+/*** MAIN CONTROL ***/
 
 void setup()
 {
@@ -204,12 +231,18 @@ void setup()
   imu2.setFullScaleAccelRange(3);
 
   pinMode(BTN_INTERRUPT_PIN, INPUT_PULLUP);
-  attachInterrupt(digitalPinToInterrupt(BTN_INTERRUPT_PIN), on_click_ISR, FALLING);
+  attachInterrupt(digitalPinToInterrupt(BTN_INTERRUPT_PIN), On_Click_ISR, FALLING);
 
+  for (int i = 0; i < IN_BUFFER_SIZE; i++)
+  {
+    receive_buffer[i] = 0;
+  }
+
+  Assign_Function_To_Header(Update_Callback, 0);
   Driver.show_boot_up_sequence();
 
   // Interval in microsecs
-  // ITimer.attachInterruptInterval(500 * 1000, TimerHandler);
+  // ITimer.attachInterruptInterval(500 * 1000, Timer_Handler);
 }
 
 void loop()
@@ -218,19 +251,25 @@ void loop()
   if (update_flag)
   {
     Driver.show_sector(true); //params: flip the sector
-    Driver.print();
+    // Driver.print();
+    Serial.println("Loop");
     update_flag = false;
   }
 
   // Driver.show_sector(false);
-  // readSensorEvent();
+  // Read_Sensor_Event();
 
   int time_elapsed = millis() - last_millis;
   if (time_elapsed >= WIFI_POLLING_INTERVAL_MS)
   {
-    if (Request_UDP_Data(buffer, String(Driver.get_curr_sector())))
+    Serial.println("Huh");
+
+    transmit_buffer[0] = Driver.get_curr_sector();
+    transmit_buffer[1] = '\0';
+
+    if (Request_UDP_Data(receive_buffer, transmit_buffer)) //params: receiving buffer as array ptr, transmitting message as String
     {
-      Process_Buffer(buffer);
+      Call_Header_Function(receive_buffer);
     }
     else
     {
@@ -240,43 +279,17 @@ void loop()
   }
 }
 
-void Process_Buffer(uint8_t *buffer)
-{
-  switch (buffer[0])
-  {
-  case 0: //update
-    // Serial.println("Update");
-    Driver.set_display_array(
-        &buffer[5], //display array starting at this index
-        buffer[2],  //num_sectors
-        buffer[3],  //num_pixels
-        buffer[4]); //num_colors
-    if (Driver.get_curr_sector() != buffer[1])
-    {
-      update_flag = true;
-    }
-    Driver.set_curr_sector(buffer[1]);
-    break;
-  case 1: //control
-    Serial.println(buffer[1], DEC);
-    Driver.set_curr_sector(buffer[1]);
-    break;
-  default:
-    Serial.println("Ignore");
-    break;
-  }
-  prev_buffer_state = buffer[0];
-}
+/*** WIFI / WIRELESS FUNCTIONS ***/
 
-bool Request_UDP_Data(uint8_t *buffer, String outbound)
+bool Request_UDP_Data(uint8_t *buffer, uint8_t *outbound)
 {
   udp.beginPacket(SERVER_IP, UDP_PORT);
-  udp.write(outbound.c_str(), outbound.length());
+  udp.write(outbound, OUT_BUFFER_SIZE);
   udp.endPacket();
-  memset(buffer, 0, BUFFER_SIZE);
-  //processing incoming packet, must be called before reading the buffer
+  memset(buffer, 0, IN_BUFFER_SIZE);
+  //processing incoming update_msg, must be called before reading the buffer
   udp.parsePacket();
-  return (udp.read(buffer, BUFFER_SIZE) > 0);
+  return (udp.read(buffer, IN_BUFFER_SIZE) > 0);
 }
 
 bool Request_TCP_Data(String *inbound, String outbound)

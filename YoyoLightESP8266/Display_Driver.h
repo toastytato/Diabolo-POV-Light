@@ -9,24 +9,27 @@
 // #define num_sectors 50 //circumference (resolution in the polar axis)
 // #endif
 
-#define NUM_LEDS 10
+// #define NUM_LEDS 10
 
 #define abs(x) ((x) > 0 ? (x) : -(x)) //esp8266 doesn't have abs for floats for some reason, so this works for floats
 
-#define LED_PIN 0
+// #define LED_PIN 0
 #define THETA 360 / num_sectors //angle per sector
 
 class DisplayDriverPOV
 {
 private:
-  Adafruit_NeoPixel Pixels = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
+  Adafruit_NeoPixel Pixels;
 
-  const uint16_t cnt_per_cycle = num_sectors / 3;
+  const uint8_t NUM_LEDS;
+  const uint8_t LED_PIN;
 
   uint8_t *display = nullptr;
   uint8_t num_sectors = 0;
   uint8_t num_pixels = 0;
   uint8_t num_colors = 0;
+
+  uint16_t cnt_per_cycle = num_sectors / 3;
   volatile uint32_t count = 0;
   volatile uint8_t curr_sector = 0;
   volatile uint8_t brightness = 255;
@@ -34,7 +37,7 @@ private:
   uint8_t get_pixel_color(uint8_t sector, uint8_t pixel, uint8_t color);
 
 public:
-  DisplayDriverPOV();
+  DisplayDriverPOV(uint8_t num_leds, uint8_t led_pin);
 
   //
   void print();
@@ -61,8 +64,9 @@ uint8_t DisplayDriverPOV::get_pixel_color(uint8_t sector, uint8_t pixel, uint8_t
 
 /***Constructors***/
 
-DisplayDriverPOV::DisplayDriverPOV()
+DisplayDriverPOV::DisplayDriverPOV(uint8_t num_leds, uint8_t pin) : NUM_LEDS(num_leds), LED_PIN(pin) //initialize constants here
 {
+  Pixels = Adafruit_NeoPixel(NUM_LEDS, LED_PIN, NEO_GRB + NEO_KHZ800);
   Pixels.begin();
 }
 

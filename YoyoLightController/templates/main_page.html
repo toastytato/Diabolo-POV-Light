@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+  <body>
+    <canvas id="canvas" height="600" width="600"> </canvas>
+    <script
+      type="text/javascript"
+      src="http://code.jquery.com/jquery-1.7.1.min.js"
+    ></script>
+
+    <script
+      type="text/javascript"
+      src="{{ url_for('static', filename='js/script.js') }}"
+    ></script>
+
+    <h2>wEW World</h2>
+    <form action="send_img_btn">
+      <button type="submit" id="btn1">Send Image to Diabolight</button>
+    </form>
+
+    <button type="submit" id="btn2">Get Array</button>
+
+    <form action="submit" method="get">
+      <p>Control Parameters:</p>
+
+      <label for="correction_input">RPM Correction: </label>
+      <input
+        type="number"
+        id="correction_input"
+        step="0.001"
+        name="correction"
+      />
+      <br />
+      <input type="submit" value="submit" />
+    </form>
+  </body>
+</html>
